@@ -1,4 +1,4 @@
-###Installation Instructions
+### Installation Instructions
 After installing requirements with pip, just run ./install which will copy all files and create the systemd service
 ~~~
 pip3 install -r requirements
@@ -6,7 +6,7 @@ pip3 install -r requirements
 systemctl enable --now autobot
 ~~~
 
-###To run locally:
+### To run locally:
 Install Requirements with pip:
 ~~~
 pip3 install -r requirements
