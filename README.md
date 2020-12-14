@@ -31,6 +31,7 @@ Then run ./autobot to manage media.
 autobot [-c CONFIG_FILE] [-s]
 ~~~
 -c    Specify config file
+
 -s    Run as a service
 
 # Editing the Config File
