@@ -1,5 +1,8 @@
+autobot is a tool to automate moving media and cleaning up files with Deluge and Filebot.  While Filebot Tool works well for deluge, the tool has not been updated for deluge2 which this is built to work in its place.
+
 # Assumed Setup
 - deluge running in a docker container
+- deluge moves files after download- **DO NOT USE ON ACTIVE DOWNLOADS**
 - Filebot installed and registered
 - podman installed
 
