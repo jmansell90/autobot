@@ -1,3 +1,8 @@
+### Assumed Setup
+- deluge running in a docker container
+- Filebot installed and registered
+- podman installed
+
 ### Installation Instructions
 After installing requirements with pip, just run ./install which will copy all files and create the systemd service
 ~~~
@@ -51,3 +56,7 @@ rules:
   - copy    Direct copy using cp.  Useful for seeding and managing files outside of filebot
   
   Patterns: See [FileBot's Documentation](https://www.filebot.net/naming.html) on expressions
+  
+  ### ToDo
+  - Create 'finish' variable in config to run commands for each file after processing
+  - Move deluge control code to its own script to work with 'finish'
