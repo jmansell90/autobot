@@ -1,0 +1,85 @@
+#!/usr/bin/python3
+import yaml
+import os
+import subprocess
+import logging
+import time
+import argparse
+from shlex import quote
+
+args = argparse.ArgumentParser(description='Automatically manage media with FileBot')
+args.add_argument('-c', '--config', help='Config file location', required=False)
+args.add_argument('-s', '--service', help='Run Autobot as a service', required=False, action='store_true')
+args_in = args.parse_args()
+
+if args_in.config:
+  config_file = args_in.config
+elif os.path.exists(os.getcwd() + '/autobot.yml'):
+  config_file = os.getcwd() + '/autobot.yml'
+elif os.path.exists(os.path.expanduser("~") + '/.autobot.yml'):
+  config_file = os.path.expanduser("~") + '/.autobot.yml'
+else:
+  config_file = '/etc/autobot/autobot.yml'
+
+try:
+  with open(config_file, 'r') as file:
+    settings = yaml.safe_load(file)
+    loglevel = getattr(logging, settings["loglevel"], logging.INFO)
+    logging.basicConfig(filename=settings["logfile"], filemode='a', format='[%(asctime)s] %(levelname)s: %(message)s', level=loglevel)
+
+    while True:
+      time.sleep(1)
+      for rule in settings["rules"]:
+        logging.debug("Running Rule {}".format(rule["name"]))
+        if rule["enabled"] == False:
+          continue
+      
+        try:
+          for media_file in os.listdir(rule["dir"]):
+            og_name = media_file
+            media_file = rule["dir"] + '/' + media_file
+
+            if media_file.endswith(".nocopy"):
+              continue
+            if os.path.exists('{}.nocopy'.format(media_file)):
+              continue
+
+            if rule["type"] == "fbmove":
+              command = 'filebot -rename \'{}\' --action MOVE --format {} --db {} -non-strict'.format(media_file,quote(rule["pattern"]),rule["database"])
+              com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
+              try:
+                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])][0]
+                if process_string:
+                  output = process_string.split("] to [")[1][:-1]
+                  logging.info(og_name + " => " + output)
+                  os.system("rm -rf '" + media_file + "'")
+                  os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
+              except IndexError:
+                logging.warn("Coult not process {}, is this even media?".format(media_file))
+                logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
+                os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
+                os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
+
+            if rule["type"] == "copy":
+              logging.info(media_file + " => " + rule["pattern"])
+              os.system('mkdir -p ' + rule["pattern"])
+              os.system(quote('cp "{}" "{}/"'.format(media_file,rule["pattern"])))
+              os.mknod(media_file + '.nocopy')
+
+            if rule["type"] == "fbcopy":
+              command = 'filebot -rename \'{}\' --action test --format {} --db {} -non-strict'.format(media_file,quote(rule["pattern"]),rule["database"])
+              com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
+              process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])][0]
+              if process_string:
+                output = process_string.split("] to [")[1][:-1]
+                logging.info(og_name + " => " + output)
+              os.mknod(media_file + '.nocopy')
+
+        except FileNotFoundError:
+          logging.debug("Directory " + rule["dir"] + " does not exist! Skipping rule " + rule["name"])
+      if not args_in.service:
+        logging.debug("Autobot has finished running :D")
+        break;
+except FileNotFoundError:
+  print("{} is not a valid config file!  Make sure it exists and check for errors!".format(config_file))
+  exit(1)

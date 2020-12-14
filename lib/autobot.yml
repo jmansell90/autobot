@@ -1,0 +1,39 @@
+loglevel: INFO
+logfile: /var/log/autobot.log
+unknown_files: /mediastore/unknown
+
+rules:
+- name    : Movies
+  type    : fbmove
+  dir     : /download/complete/Movies
+  pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
+  database: TheMovieDB
+  enabled : true
+
+- name    : TV Shows
+  type    : fbmove
+  dir     : /download/complete/TV
+  pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
+  database: TheTVDB
+  enabled : true
+
+- name    : eBooks
+  type    : copy
+  dir     : /download/complete/eBooks
+  pattern : /mediastore/eBooks
+  database: null
+  enabled : false
+
+- name    : Movies - Private Tracker
+  type    : fbcopy
+  dir     : /download/keep/Movies
+  pattern : "/mediastore/{info.ProductionCountries =~ /US/ ? 'Movies/' : 'Foreign Movies/'}/{n} (/{y})/{n} ({y})"
+  database: TheMovieDB
+  enabled : false
+
+- name    : TV - Private Tracker
+  type    : fbcopy
+  dir     : /download/keep/TV
+  pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
+  database: TheTVDB
+  enabled : false

@@ -1,0 +1,6 @@
+#!/bin/bash
+cp -rf autobot /usr/local/bin/autobot
+cp -f lib/autobot.service /etc/systemd/system/autobot.service
+mkdir -p /etc/autobot
+cp lib/autobot.yml /etc/autobot
+systemctl daemon-reload
