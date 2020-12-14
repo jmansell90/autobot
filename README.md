@@ -1,9 +1,9 @@
-### Assumed Setup
+# Assumed Setup
 - deluge running in a docker container
 - Filebot installed and registered
 - podman installed
 
-### Installation Instructions
+# Installation Instructions
 After installing requirements with pip, just run ./install which will copy all files and create the systemd service
 ~~~
 pip3 install -r requirements
@@ -11,7 +11,7 @@ pip3 install -r requirements
 systemctl enable --now autobot
 ~~~
 
-### To run locally:
+# To run locally:
 Install Requirements with pip:
 ~~~
 pip3 install -r requirements
@@ -26,14 +26,14 @@ Then run ./autobot to manage media.
 ./autobot
 ~~~
 
-### Usage:
+## Usage:
 ~~~
 autobot [-c CONFIG_FILE] [-s]
 ~~~
 -c    Specify config file
 -s    Run as a service
 
-### Editing the Config File
+# Editing the Config File
 Order of precedence: CLI Argument > autobot.yml in current directory > .autobot.yml in HOME > /etc/autobot/autobot.yml
 ## Example Config
 ~~~
@@ -57,6 +57,6 @@ rules:
   
   Patterns: See [FileBot's Documentation](https://www.filebot.net/naming.html) on expressions
   
-  ### ToDo
+  # ToDo
   - Create 'finish' variable in config to run commands for each file after processing
   - Move deluge control code to its own script to work with 'finish'
