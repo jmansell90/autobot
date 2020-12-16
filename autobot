@@ -44,16 +44,24 @@ try:
             if os.path.exists('{}.nocopy'.format(media_file)):
               continue
 
+            logging.debug("Processing file {}".format(media_file))
+
             if rule["type"] == "fbmove":
-              command = 'filebot -rename \'{}\' --action MOVE --format {} --db {} -non-strict'.format(media_file,quote(rule["pattern"]),rule["database"])
+              command = 'filebot -rename \'{}\' --action MOVE --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
               com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
+              logging.debug(com_out)
               try:
-                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])][0]
+                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
                 if process_string:
-                  output = process_string.split("] to [")[1][:-1]
-                  logging.info(og_name + " => " + output)
+                  out_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
+                  for out_string in process_string:
+                    output = out_string.split("] to [")[1][:-1]
+                    logging.info(og_name + " => " + output)
                   os.system("rm -rf '" + media_file + "'")
                   os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
+                  if rule["scripts"]:
+                    for fbscript in rule["scripts"]:
+                      os.system("filebot -script {} '{}'".format(fbscript, out_dir)) 
               except IndexError:
                 logging.warn("Coult not process {}, is this even media?".format(media_file))
                 logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
@@ -67,7 +75,7 @@ try:
               os.mknod(media_file + '.nocopy')
 
             if rule["type"] == "fbcopy":
-              command = 'filebot -rename \'{}\' --action test --format {} --db {} -non-strict'.format(media_file,quote(rule["pattern"]),rule["database"])
+              command = 'filebot -rename \'{}\' --action test --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
               com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
               process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])][0]
               if process_string:

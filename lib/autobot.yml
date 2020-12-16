@@ -8,6 +8,8 @@ rules:
   dir     : /download/complete/Movies
   pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
   database: TheMovieDB
+  scripts :
+    - 'fn:artwork.tmdb'
   enabled : true
 
 - name    : TV Shows
@@ -15,6 +17,8 @@ rules:
   dir     : /download/complete/TV
   pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
   database: TheTVDB
+  scripts :
+    - 'fn:artwork.tvdb'
   enabled : true
 
 - name    : eBooks
@@ -29,6 +33,8 @@ rules:
   dir     : /download/keep/Movies
   pattern : "/mediastore/{info.ProductionCountries =~ /US/ ? 'Movies/' : 'Foreign Movies/'}/{n} (/{y})/{n} ({y})"
   database: TheMovieDB
+  scripts :
+    - 'fn:artwork.tmdb'
   enabled : false
 
 - name    : TV - Private Tracker
@@ -36,4 +42,6 @@ rules:
   dir     : /download/keep/TV
   pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
   database: TheTVDB
+  scripts :
+  - 'fn:artwork.tvdb'
   enabled : false
