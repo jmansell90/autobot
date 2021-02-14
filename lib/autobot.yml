@@ -1,6 +1,6 @@
 loglevel: INFO
 logfile: /var/log/autobot.log
-unknown_files: /mediastore/unknown
+unknown_files: '/mediastore/unknown'
 
 rules:
 - name    : Movies
@@ -9,7 +9,11 @@ rules:
   pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
   database: TheMovieDB
   scripts :
-    - 'fn:artwork.tmdb'
+    - '/root/filebot-scripts/artwork.tmdb.groovy'
+  cleanup :
+    - "rm -rf '%%in_file%%'"
+    - "podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*%%in_file_base%%*'"
+    - "mv '%%out_file_parent%%/movie.nfo' %%out_file_parent%%/%%out_file_base_noext%%.nfo'" 
   enabled : true
 
 - name    : TV Shows
@@ -24,18 +28,18 @@ rules:
 - name    : eBooks
   type    : copy
   dir     : /download/complete/eBooks
-  pattern : /mediastore/eBooks
+  pattern : /mediastore/calibre/tmp
   database: null
-  enabled : false
+  enabled : true
 
 - name    : Movies - Private Tracker
   type    : fbcopy
   dir     : /download/keep/Movies
-  pattern : "/mediastore/{info.ProductionCountries =~ /US/ ? 'Movies/' : 'Foreign Movies/'}/{n} (/{y})/{n} ({y})"
+  pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
   database: TheMovieDB
   scripts :
     - 'fn:artwork.tmdb'
-  enabled : false
+  enabled : true
 
 - name    : TV - Private Tracker
   type    : fbcopy
@@ -44,4 +48,11 @@ rules:
   database: TheTVDB
   scripts :
   - 'fn:artwork.tvdb'
-  enabled : false
+  enabled : true
+
+- name    : Misc
+  type    : copy
+  dir     : /download/complete/Misc
+  pattern : /mediastore/Misc
+  database: null
+  enabled : true

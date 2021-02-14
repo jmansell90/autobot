@@ -24,7 +24,7 @@ else:
 try:
   with open(config_file, 'r') as file:
     settings = yaml.safe_load(file)
-    loglevel = getattr(logging, settings["loglevel"], logging.INFO)
+    loglevel = getattr(logging, settings["loglevel"], logging.DEBUG)
     logging.basicConfig(filename=settings["logfile"], filemode='a', format='[%(asctime)s] %(levelname)s: %(message)s', level=loglevel)
 
     while True:
@@ -44,14 +44,18 @@ try:
             if os.path.exists('{}.nocopy'.format(media_file)):
               continue
 
+            print("Processing file {}".format(media_file))
             logging.debug("Processing file {}".format(media_file))
 
             if rule["type"] == "fbmove":
-              command = 'filebot -rename \'{}\' --action MOVE --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
+              command = 'filebot -rename \"{}\" --action MOVE --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
+              print(command)
               com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
               logging.debug(com_out)
               try:
+                skip_string = [f for f in com_out if any(xf in f for xf in ["Skipped", "is an exact copy"])]
                 process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
+                fail_string = [f for f in com_out if any(xf in f for xf in ["Failure (×_×)"])]
                 if process_string:
                   out_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
                   for out_string in process_string:
@@ -61,7 +65,17 @@ try:
                   os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
                   if rule["scripts"]:
                     for fbscript in rule["scripts"]:
-                      os.system("filebot -script {} '{}'".format(fbscript, out_dir)) 
+                      os.system('filebot -script {} "{}"'.format(fbscript, out_dir))
+                elif skip_string:
+                  os.system('rm -rf "{}"'.format(media_file))
+                  logging.info("{} Already in library... skipping...".format(media_file))
+                  os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
+                  print("This will delete {}".format(media_file))
+                elif fail_string:
+                  logging.warn("Could not identify {}".format(media_file))
+                  logging.info("Moving {} to {}".format(media_file, settings["unknown_files"]))
+                  os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
+                  os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
               except IndexError:
                 logging.warn("Coult not process {}, is this even media?".format(media_file))
                 logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
@@ -71,16 +85,41 @@ try:
             if rule["type"] == "copy":
               logging.info(media_file + " => " + rule["pattern"])
               os.system('mkdir -p ' + rule["pattern"])
-              os.system(quote('cp "{}" "{}/"'.format(media_file,rule["pattern"])))
+              os.system("cp -r '{}' '{}/{}'".format(media_file,rule["pattern"], og_name))
+              os.system("chmod -R 777 '{}'".format(rule["pattern"]))
               os.mknod(media_file + '.nocopy')
 
             if rule["type"] == "fbcopy":
-              command = 'filebot -rename \'{}\' --action test --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
+              command = 'filebot -rename \'{}\' --action copy --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
+              print(command)
               com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
-              process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])][0]
-              if process_string:
-                output = process_string.split("] to [")[1][:-1]
-                logging.info(og_name + " => " + output)
+              logging.debug(com_out)
+              try:
+                skip_string = [f for f in com_out if any(xf in f for xf in ["Skipped", "is an exact copy"])]
+                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
+                fail_string = [f for f in com_out if any(xf in f for xf in ["Failure (×_×)"])]
+                if process_string:
+                  out_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
+                  for out_string in process_string:
+                    output = out_string.split("] to [")[1][:-1]
+                    logging.info(og_name + " => " + output)
+                  if rule["scripts"]:
+                    for fbscript in rule["scripts"]:
+                      os.system("filebot -script {} '{}'".format(fbscript, out_dir))
+                elif skip_string:
+                  logging.info("{} Already in library... skipping...".format(media_file))
+                  os.system('touch "{}.nocopy"'.format(media_file))
+                elif fail_string:
+                  logging.warn("Could not identify {}".format(media_file))
+                  logging.info("Moving {} to {}".format(media_file, settings["unknown_files"]))
+                  os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
+                  os.system('cp "{}" "{}"/'.format(media_file,settings["unknown_files"]))
+                  os.system('touch "{}.nocopy"'.format(media_file))
+              except IndexError:
+                logging.warn("Coult not process {}, is this even media?".format(media_file))
+                logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
+                os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
+                os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
               os.mknod(media_file + '.nocopy')
 
         except FileNotFoundError:
