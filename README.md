@@ -66,4 +66,5 @@ rules:
   - Move deluge control code to its own script to work with 'finish'
 
 ## QUICK NOTES ABOUT filebot-scripts
+
 This is a direct clone of https://github.com/filebot/scripts where I have changed artwork.tmdb.groovy to create 'MOVIE TITLE.nfo' instead of 'movie.nfo' as is standard for use with Kodi
