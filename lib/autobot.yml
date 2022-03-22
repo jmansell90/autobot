@@ -1,58 +1,161 @@
 loglevel: INFO
 logfile: /var/log/autobot.log
 unknown_files: '/mediastore/unknown'
+poll: 60
 
 rules:
 - name    : Movies
   type    : fbmove
-  dir     : /download/complete/Movies
-  pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
+  dir     : /downloads/deluge/complete/Movies
+  pattern : '/library/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
   database: TheMovieDB
   scripts :
     - '/root/filebot-scripts/artwork.tmdb.groovy'
-  cleanup :
-    - "rm -rf '%%in_file%%'"
-    - "podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*%%in_file_base%%*'"
-    - "mv '%%out_file_parent%%/movie.nfo' %%out_file_parent%%/%%out_file_base_noext%%.nfo'" 
   enabled : true
+  notify  :
+    - name    : "Emby-Movies"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/4/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+    - name    : "Emby-French"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/111983&serverId=28cbec51b2574482bae76ebdaf200c55/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+
 
 - name    : TV Shows
   type    : fbmove
-  dir     : /download/complete/TV
-  pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
+  dir     : /downloads/deluge/complete/TV
+  pattern : "/library/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
   database: TheTVDB
   scripts :
     - 'fn:artwork.tvdb'
   enabled : true
+  notify  :
+    - name    : "Emby-TV"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/4ff5fdc9ac2e53dad01716d3f5c53dad/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+
+- name    : Anime
+  type    : fbmove
+  dir     : /downloads/deluge/complete/Anime
+  pattern : "/library/Anime/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
+  database: TheTVDB
+  scripts :
+    - 'fn:artwork.tvdb'
+  enabled : true
+  notify  :
+    - name    : "Emby-TV"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/0c41907140d802bb58430fed7e2cd79e/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+
+- name    : Anime Movies
+  type    : fbmove
+  dir     : /downloads/deluge/complete/AnimeMovies
+  pattern : '/library/AnimeMovies/{n} ({y})/{n} ({y})'
+  database: TheMovieDB
+  scripts :
+    - '/root/filebot-scripts/artwork.tmdb.groovy'
+  enabled : true
+  notify  :
+    - name    : "Emby-Movies"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/0c41907140d802bb58430fed7e2cd79e/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
 
 - name    : eBooks
   type    : copy
-  dir     : /download/complete/eBooks
-  pattern : /mediastore/calibre/tmp
+  dir     : /downloads/deluge/complete/eBooks
+  pattern : /library/calibre/tmp
   database: null
   enabled : true
+ 
+- name    : Audiobooks
+  type    : copy
+  dir     : /downloads/deluge/complete/Audiobooks
+  pattern : /library/Audiobooks
+  database: null
+  enabled : true
+  notify  :
+    - name    : "Emby-Audiobooks"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/c0c1444b416777d3fa55d5f13da1ce58/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
 
 - name    : Movies - Private Tracker
   type    : fbcopy
-  dir     : /download/keep/Movies
-  pattern : '/mediastore/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
+  dir     : /downloads/deluge/keep/Movies
+  pattern : '/library/{info.ProductionCountries =~ /US/ ? "Movies/" : "Foreign Movies/"}/{n} ({y})/{n} ({y})'
   database: TheMovieDB
   scripts :
     - 'fn:artwork.tmdb'
   enabled : true
+  notify  :
+    - name    : "Emby-Movies"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/4/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+    - name    : "Emby-French"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/111983&serverId=28cbec51b2574482bae76ebdaf200c55/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
 
 - name    : TV - Private Tracker
   type    : fbcopy
-  dir     : /download/keep/TV
-  pattern : "/mediastore/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
+  dir     : /downloads/deluge/keep/TV
+  pattern : "/library/TV/{n}/{episode.special ? 'Season 0' : 'Season '+s}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}/{episode.special ? '0x'+special.pad(2) : s00e00} - {t}"
   database: TheTVDB
   scripts :
   - 'fn:artwork.tvdb'
   enabled : true
+  notify  :
+    - name    : "Emby-TV"
+      type    : "api"
+      req     : "post"
+      server  : "EMBY_SERVER"
+      endpoint: "emby/Items/4ff5fdc9ac2e53dad01716d3f5c53dad/Refresh?Recursive=true&ImageRefreshMode=Default&MetadataRefreshMode=Default&ReplaceAllImages=false&ReplaceAllMetadata=false&api_key=API_KEY"
+      headers :
+        Accept: "*/*"
+        Accept-Encoding: "gzip, deflate"
+
 
 - name    : Misc
   type    : copy
-  dir     : /download/complete/Misc
-  pattern : /mediastore/Misc
+  dir     : /downloads/deluge/complete/Misc
+  pattern : /library/Misc
   database: null
   enabled : true

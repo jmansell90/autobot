@@ -5,128 +5,181 @@ import subprocess
 import logging
 import time
 import argparse
+import shutil
+import requests
 from shlex import quote
+from enum import Enum
 
-args = argparse.ArgumentParser(description='Automatically manage media with FileBot')
-args.add_argument('-c', '--config', help='Config file location', required=False)
-args.add_argument('-s', '--service', help='Run Autobot as a service', required=False, action='store_true')
-args_in = args.parse_args()
+def grabArgs():
+    args = argparse.ArgumentParser(description='Automatically manage media with FileBot')
+    args.add_argument('-c', '--config', help='Config file location', required=False)
+    args.add_argument('-s', '--service', help='Run Autobot as a service', required=False, action='store_true')
+    return args.parse_args()
 
-if args_in.config:
-  config_file = args_in.config
-elif os.path.exists(os.getcwd() + '/autobot.yml'):
-  config_file = os.getcwd() + '/autobot.yml'
-elif os.path.exists(os.path.expanduser("~") + '/.autobot.yml'):
-  config_file = os.path.expanduser("~") + '/.autobot.yml'
-else:
-  config_file = '/etc/autobot/autobot.yml'
+def parseArgs(args_in):
+    if args_in.config:
+        config_file = args_in.config
+    elif os.path.exists(os.getcwd() + '/autobot.yml'):
+        config_file = os.getcwd() + '/autobot.yml'
+    elif os.path.exists(os.path.expanduser("~") + '/.autobot.yml'):
+        config_file = os.path.expanduser("~") + '/.autobot.yml'
+    else:
+        config_file = '/etc/autobot/autobot.yml'
+    return config_file
 
-try:
-  with open(config_file, 'r') as file:
-    settings = yaml.safe_load(file)
-    loglevel = getattr(logging, settings["loglevel"], logging.DEBUG)
-    logging.basicConfig(filename=settings["logfile"], filemode='a', format='[%(asctime)s] %(levelname)s: %(message)s', level=loglevel)
+def loadSettings(config_file):
+    try:
+        with open(config_file, 'r') as file:
+            settings = yaml.safe_load(file)
+            loglevel = getattr(logging, settings["loglevel"], logging.DEBUG)
+            logging.basicConfig(filename=settings["logfile"], filemode='a', format='[%(asctime)s] %(levelname)s: %(message)s', level=loglevel)
+    except FileNotFoundError:
+        print("{} ios not a valid config file!  Make sure it exists and check for errors!".format(config_file))
+        exit(1)
+    return settings
 
+def grabDownloads(location):
+    mediafiles = []
+    for media_file in os.listdir(location):
+        if media_file.endswith(".nocopy"):
+            continue
+        if os.path.exists('{}.nocopy'.format(location + '/' + media_file)):
+            continue
+        mediafiles.append(location + '/' + media_file)
+    return mediafiles
+
+def runCommand(command):
+    return subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
+
+def processOutput(command):
+    output_dir = ''
+    output = ''
+    successCode = 0
+    try:
+        skip_string = [f for f in command if any(xf in f for xf in ["Skipped", "is an exact copy", "already exists"])]
+        process_string = [s for s in command if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
+        fail_string = [f for f in command if any(xf in f for xf in ["Failure (×_×)"])]
+        if process_string:
+            output_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
+            for line in process_string:
+                output = output + line.split("] to [")[1][:-1]
+            successCode = 1
+        elif skip_string:
+            logging.error("{} already exists!".format(output_dir))
+            successCode = 2
+        elif fail_string:
+            for line in fail_string:
+                output = output + line.split("] to [")[1][:-1]
+            successCode = 3
+            logging.error("Failed to process " + output_dir)
+            logging.error(command)
+    except IndexError:
+        successCode = 4
+
+    return {'output_dir': output_dir,
+            'output': output,
+            'successCode': successCode}
+
+def runScripts(directory, rule):
+    if rule['scripts']:
+        for fbscript in rule['scripts']:
+            os.system("filebot -script {} \"{}\"".format(fbscript, directory))
+
+def sendAPI(rule):
+    try:
+        headers = {}
+        if rule['headers']:
+            headers = rule['headers']
+        endpoint = "{}/{}".format(rule['server'], rule['endpoint'])
+        if rule['req'] == 'get':
+            response = requests.get(endpoint, headers=headers)
+            print(response)
+        if rule['req'] == 'post':
+            response = requests.post(endpoint, headers=headers)
+            print(response)
+    except:
+        logging.error("Invalid API settings for {}!".format(rule['name']))
+        print("Invalid API settings for {}!".format(rule['name']))
+
+
+def runNotify(rule):
+    if rule['notify']:
+        for notify in rule['notify']:
+            logging.debug("Notifying " + notify['name'])
+            if notify['type'] == 'api':
+                sendAPI(notify)
+
+
+def removeFile(filepath):
+    if os.path.isfile(filepath):
+        os.remove(filepath)
+    elif os.path.isdir(filepath):
+        shutil.rmtree(filepath)
+
+def fbmove(filepath, rule):
+    qpattern = quote(rule['pattern'])
+    command = "filebot -rename \"{}\" --action MOVE --format {} --db {} -non-strict -r".format(filepath,qpattern,rule["database"])
+    returncode = processOutput(runCommand(command))
+    if returncode['successCode'] == 1:
+        logging.info("{} => {}".format(filepath, returncode['output_dir']))
+        runScripts(returncode['output_dir'], rule)
+        removeFile(filepath)
+        return True
+    if returncode['successCode'] == 2:
+        removeFile(filepath)
+        return False
+    return False
+
+def fbcopy(filepath, rule):
+    qpattern = quote(rule['pattern'])
+    command = 'filebot -rename \'{}\' --action copy --format {} --db {} -non-strict -r'.format(filepath,qpattern,rule["database"])
+    returncode = processOutput(command)
+    if returncode['successCode'] == 1:
+        runScripts(returncode['output_dir'], rule)
+        return True
+    return False
+
+def copyfile(filepath, rule):
+    qpattern = quote(rule['pattern'])
+    if not os.path.exists(rule['pattern']):
+        os.makedirs(rule['pattern'])
+    os.system("cp -r {} {}/".format(quote(filepath), qpattern))
+    os.system("chmod -R 777 {}".format(qpattern))
+    os.mknod(filepath + '.nocopy')
+    return True
+
+def processFile(filepath, rule):
+    if rule['type'] == 'fbmove':
+        fbmove(filepath, rule)
+
+    if rule['type'] == 'fbcopy':
+        fbcopy(filepath, rule)
+
+    if rule["type"] == 'copy':
+        copyfile(filepath, rule)
+
+def main():
+    for rule in settings['rules']:
+        if rule['enabled']:
+            try:
+                update = False;
+                for mfile in grabDownloads(rule['dir']):
+                    logging.info("Processing {}".format(mfile))
+                    print("Processing {}".format(mfile))
+                    if processFile(mfile, rule):
+                        update = True
+                if update:
+                    runNotify(rule)
+            except FileNotFoundError:
+                logging.debug("Monitored Directory {} Does Not Exist!  Skipping Rule: {}".format(rule['dir'], rule['name']))
+
+argsIn = grabArgs()
+config = parseArgs(argsIn)
+settings = loadSettings(config)
+
+if argsIn.service:
     while True:
-      time.sleep(1)
-      for rule in settings["rules"]:
-        logging.debug("Running Rule {}".format(rule["name"]))
-        if rule["enabled"] == False:
-          continue
-      
-        try:
-          for media_file in os.listdir(rule["dir"]):
-            og_name = media_file
-            media_file = rule["dir"] + '/' + media_file
-
-            if media_file.endswith(".nocopy"):
-              continue
-            if os.path.exists('{}.nocopy'.format(media_file)):
-              continue
-
-            print("Processing file {}".format(media_file))
-            logging.debug("Processing file {}".format(media_file))
-
-            if rule["type"] == "fbmove":
-              command = 'filebot -rename \"{}\" --action MOVE --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
-              print(command)
-              com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
-              logging.debug(com_out)
-              try:
-                skip_string = [f for f in com_out if any(xf in f for xf in ["Skipped", "is an exact copy"])]
-                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
-                fail_string = [f for f in com_out if any(xf in f for xf in ["Failure (×_×)"])]
-                if process_string:
-                  out_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
-                  for out_string in process_string:
-                    output = out_string.split("] to [")[1][:-1]
-                    logging.info(og_name + " => " + output)
-                  os.system("rm -rf '" + media_file + "'")
-                  os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
-                  if rule["scripts"]:
-                    for fbscript in rule["scripts"]:
-                      os.system('filebot -script {} "{}"'.format(fbscript, out_dir))
-                elif skip_string:
-                  os.system('rm -rf "{}"'.format(media_file))
-                  logging.info("{} Already in library... skipping...".format(media_file))
-                  os.system("podman exec deluge deluge-console -c /config \"connect 127.0.0.1:58846; rm '*{}*' -c; exit\"".format(og_name[:-1]))
-                  print("This will delete {}".format(media_file))
-                elif fail_string:
-                  logging.warn("Could not identify {}".format(media_file))
-                  logging.info("Moving {} to {}".format(media_file, settings["unknown_files"]))
-                  os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
-                  os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
-              except IndexError:
-                logging.warn("Coult not process {}, is this even media?".format(media_file))
-                logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
-                os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
-                os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
-
-            if rule["type"] == "copy":
-              logging.info(media_file + " => " + rule["pattern"])
-              os.system('mkdir -p ' + rule["pattern"])
-              os.system("cp -r '{}' '{}/{}'".format(media_file,rule["pattern"], og_name))
-              os.system("chmod -R 777 '{}'".format(rule["pattern"]))
-              os.mknod(media_file + '.nocopy')
-
-            if rule["type"] == "fbcopy":
-              command = 'filebot -rename \'{}\' --action copy --format {} --db {} -non-strict -r'.format(media_file,quote(rule["pattern"]),rule["database"])
-              print(command)
-              com_out = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).stdout.read().decode().split('\n')
-              logging.debug(com_out)
-              try:
-                skip_string = [f for f in com_out if any(xf in f for xf in ["Skipped", "is an exact copy"])]
-                process_string = [s for s in com_out if any(xs in s for xs in ["TEST", "MOVE", "COPY"])]
-                fail_string = [f for f in com_out if any(xf in f for xf in ["Failure (×_×)"])]
-                if process_string:
-                  out_dir = os.path.dirname(process_string[0].split("] to [")[1][:-1])
-                  for out_string in process_string:
-                    output = out_string.split("] to [")[1][:-1]
-                    logging.info(og_name + " => " + output)
-                  if rule["scripts"]:
-                    for fbscript in rule["scripts"]:
-                      os.system("filebot -script {} '{}'".format(fbscript, out_dir))
-                elif skip_string:
-                  logging.info("{} Already in library... skipping...".format(media_file))
-                  os.system('touch "{}.nocopy"'.format(media_file))
-                elif fail_string:
-                  logging.warn("Could not identify {}".format(media_file))
-                  logging.info("Moving {} to {}".format(media_file, settings["unknown_files"]))
-                  os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
-                  os.system('cp "{}" "{}"/'.format(media_file,settings["unknown_files"]))
-                  os.system('touch "{}.nocopy"'.format(media_file))
-              except IndexError:
-                logging.warn("Coult not process {}, is this even media?".format(media_file))
-                logging.info("Moving {} to {}/".format(media_file, settings["unknown_files"]))
-                os.system('mkdir -p "{}"'.format(settings["unknown_files"]))
-                os.system('mv "{}" "{}"/'.format(media_file,settings["unknown_files"]))
-              os.mknod(media_file + '.nocopy')
-
-        except FileNotFoundError:
-          logging.debug("Directory " + rule["dir"] + " does not exist! Skipping rule " + rule["name"])
-      if not args_in.service:
-        logging.debug("Autobot has finished running :D")
-        break;
-except FileNotFoundError:
-  print("{} is not a valid config file!  Make sure it exists and check for errors!".format(config_file))
-  exit(1)
+        main()
+        time.sleep(settings['poll'])
+else:
+    main()
